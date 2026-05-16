@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Egypt' if region == 'EGYPT' else 'US/EU' }} · {{ total }} jobs{% endblock %}
+{% block content %}
+<form method="get" action="{{ '/egypt' if region == 'EGYPT' else '/international' }}" class="filters">
+  <input type="search" name="q" value="{{ filters.q or '' }}" placeholder="Search title or description…" />
+  <select name="source">
+    <option value="">All sources</option>
+    {% for s in all_sources %}
+      <option value="{{ s }}" {% if filters.source == s %}selected{% endif %}>{{ s }}</option>
+    {% endfor %}
+  </select>
+  <select name="country">
+    <option value="">USA + Europe + Remote</option>
+    <option value="USA" {% if filters.country == 'USA' %}selected{% endif %}>USA only</option>
+    <option value="Europe" {% if filters.country == 'Europe' %}selected{% endif %}>Europe only</option>
+    <option value="Remote" {% if filters.country == 'Remote' %}selected{% endif %}>Remote only</option>
+  </select>
+  <select name="status">
+    <option value="NOT_APPLIED" {% if filters.status == 'NOT_APPLIED' %}selected{% endif %}>Not applied</option>
+    <option value="APPLIED" {% if filters.status == 'APPLIED' %}selected{% endif %}>Applied</option>
+    <option value="REJECTED" {% if filters.status == 'REJECTED' %}selected{% endif %}>Rejected</option>
+    <option value="INTERVIEWING" {% if filters.status == 'INTERVIEWING' %}selected{% endif %}>Interviewing</option>
+    <option value="OFFER" {% if filters.status == 'OFFER' %}selected{% endif %}>Offer</option>
+    <option value="" {% if filters.status == '' %}selected{% endif %}>Any status</option>
+  </select>
+  <select name="lifecycle">
+    <option value="ACTIVE" {% if filters.lifecycle == 'ACTIVE' %}selected{% endif %}>Active</option>
+    <option value="CLOSED" {% if filters.lifecycle == 'CLOSED' %}selected{% endif %}>Closed</option>
+    <option value="ARCHIVED" {% if filters.lifecycle == 'ARCHIVED' %}selected{% endif %}>Archived</option>
+    <option value="ACTIVE,CLOSED,ARCHIVED" {% if filters.lifecycle == 'ACTIVE,CLOSED,ARCHIVED' %}selected{% endif %}>Any lifecycle</option>
+  </select>
+  <select name="min_score">
+    <option value="">Any score</option>
+    <option value="50" {% if filters.min_score == '50' %}selected{% endif %}>50+</option>
+    <option value="70" {% if filters.min_score == '70' %}selected{% endif %}>70+</option>
+    <option value="85" {% if filters.min_score == '85' %}selected{% endif %}>85+</option>
+  </select>
+  <label class="check"><input type="checkbox" name="remote" value="true" {% if filters.remote %}checked{% endif %}/> Remote only</label>
+  <label class="check"><input type="checkbox" name="favorites" value="true" {% if filters.favorites %}checked{% endif %}/> Favorites</label>
+  <button class="btn" type="submit">Apply filters</button>
+</form>
+
+<div class="meta">Showing <strong>{{ jobs|length }}</strong> of <strong>{{ total }}</strong> matching jobs</div>
+
+<table class="jobs">
+  <thead>
+    <tr>
+      <th>Score</th>
+      <th>Company</th>
+      <th>Title</th>
+      <th>Location</th>
+      <th>Source</th>
+      <th>Posted</th>
+      <th>Actions</th>
+    </tr>
+  </thead>
+  <tbody id="job-tbody">
+    {% for j in jobs %}
+      {% include 'partials/job_row.html' %}
+    {% endfor %}
+  </tbody>
+</table>
+
+{% if jobs|length == 0 %}
+  <p class="empty">No jobs match the current filters. Try widening them, or click <em>Refresh now</em>.</p>
+{% endif %}
+{% endblock %}

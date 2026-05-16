@@ -1,0 +1,290 @@
+# Seed list of companies to scrape. Add or remove freely.
+# Each entry maps a SOURCE to its public board identifier:
+#   - greenhouse: the board_token from boards.greenhouse.io/<token>
+#   - lever:      the org slug from jobs.lever.co/<org>
+#   - ashby:      the org slug from jobs.ashbyhq.com/<org>
+#   - workday:    config object — implementation lands in Turn 2.
+#   - wellfound:  the company slug on wellfound.com/company/<slug>
+
+companies:
+  # --- Greenhouse ---
+  - slug: stripe
+    name: Stripe
+    source: greenhouse
+    external_id: stripe
+    careers_url: https://stripe.com/jobs
+
+  - slug: airbnb
+    name: Airbnb
+    source: greenhouse
+    external_id: airbnb
+    careers_url: https://careers.airbnb.com/
+
+  - slug: discord
+    name: Discord
+    source: greenhouse
+    external_id: discord
+    careers_url: https://discord.com/jobs
+
+  - slug: doordash
+    name: DoorDash
+    source: greenhouse
+    external_id: doordash
+    careers_url: https://careers.doordash.com/
+
+  - slug: anthropic
+    name: Anthropic
+    source: greenhouse
+    external_id: anthropic
+    careers_url: https://www.anthropic.com/careers
+
+  - slug: cloudflare
+    name: Cloudflare
+    source: greenhouse
+    external_id: cloudflare
+    careers_url: https://www.cloudflare.com/careers/
+
+  - slug: figma
+    name: Figma
+    source: greenhouse
+    external_id: figma
+    careers_url: https://www.figma.com/careers/
+
+  - slug: gitlab
+    name: GitLab
+    source: greenhouse
+    external_id: gitlab
+    careers_url: https://about.gitlab.com/jobs/
+
+  - slug: instacart
+    name: Instacart
+    source: greenhouse
+    external_id: instacart
+    careers_url: https://instacart.careers/
+
+  - slug: reddit
+    name: Reddit
+    source: greenhouse
+    external_id: reddit
+    careers_url: https://www.redditinc.com/careers
+
+  - slug: robinhood
+    name: Robinhood
+    source: greenhouse
+    external_id: robinhood
+    careers_url: https://careers.robinhood.com/
+
+  - slug: hashicorp
+    name: HashiCorp
+    source: greenhouse
+    external_id: hashicorp
+    careers_url: https://www.hashicorp.com/careers
+
+  - slug: coinbase
+    name: Coinbase
+    source: greenhouse
+    external_id: coinbase
+    careers_url: https://www.coinbase.com/careers
+
+  - slug: snowflake
+    name: Snowflake
+    source: greenhouse
+    external_id: snowflake
+    careers_url: https://careers.snowflake.com/
+
+  # --- Lever ---
+  - slug: netflix
+    name: Netflix
+    source: lever
+    external_id: netflix
+    careers_url: https://jobs.netflix.com/
+
+  - slug: shopify
+    name: Shopify
+    source: lever
+    external_id: shopify
+    careers_url: https://www.shopify.com/careers
+
+  - slug: spotify
+    name: Spotify
+    source: lever
+    external_id: spotify
+    careers_url: https://www.lifeatspotify.com/
+
+  - slug: figma-lever
+    name: Figma (Lever)
+    source: lever
+    external_id: figma
+    careers_url: https://www.figma.com/careers/
+
+  - slug: brex
+    name: Brex
+    source: lever
+    external_id: brex
+    careers_url: https://www.brex.com/careers
+
+  - slug: ramp
+    name: Ramp
+    source: lever
+    external_id: ramp
+    careers_url: https://ramp.com/careers
+
+  # --- Ashby ---
+  - slug: openai
+    name: OpenAI
+    source: ashby
+    external_id: openai
+    careers_url: https://openai.com/careers
+
+  - slug: ramp-ashby
+    name: Ramp (Ashby)
+    source: ashby
+    external_id: ramp
+    careers_url: https://ramp.com/careers
+
+  - slug: linear
+    name: Linear
+    source: ashby
+    external_id: linear
+    careers_url: https://linear.app/careers
+
+  - slug: posthog
+    name: PostHog
+    source: ashby
+    external_id: posthog
+    careers_url: https://posthog.com/careers
+
+  - slug: vercel
+    name: Vercel
+    source: ashby
+    external_id: vercel
+    careers_url: https://vercel.com/careers
+
+  # --- Workday (configured in Turn 2) ---
+  # Example entries to enable later:
+  # - slug: nvidia
+  #   name: NVIDIA
+  #   source: workday
+  #   external_id: nvidia
+  #   config:
+  #     host: nvidia.wd5.myworkdayjobs.com
+  #     tenant: nvidia
+  #     site: NVIDIAExternalCareerSite
+
+  # --- Wellfound ---
+  # - slug: wellfound-marketplace
+  #   name: Wellfound (curated)
+  #   source: wellfound
+  #   external_id: marketplace
+
+  # ============================================================
+  # EGYPT REGION — Java-backend focused searches
+  # ============================================================
+
+  # --- LinkedIn guest searches (no login, polite jittered pagination) ---
+  # Broader 30-day window + more keyword variants for higher recall.
+  - slug: linkedin-egypt-java
+    name: LinkedIn · Java in Egypt
+    source: linkedin
+    external_id: linkedin-egypt-java
+    target_region: EGYPT
+    careers_url: https://www.linkedin.com/jobs/
+    config: {keywords: java, location: Egypt, time_posted: r2592000, max_pages: 6, fetch_details: true}
+
+  - slug: linkedin-egypt-java-developer
+    name: LinkedIn · Java Developer in Egypt
+    source: linkedin
+    external_id: linkedin-egypt-java-developer
+    target_region: EGYPT
+    careers_url: https://www.linkedin.com/jobs/
+    config: {keywords: java developer, location: Egypt, time_posted: r2592000, max_pages: 6, fetch_details: true}
+
+  - slug: linkedin-egypt-backend
+    name: LinkedIn · Backend in Egypt
+    source: linkedin
+    external_id: linkedin-egypt-backend
+    target_region: EGYPT
+    careers_url: https://www.linkedin.com/jobs/
+    config: {keywords: backend, location: Egypt, time_posted: r2592000, max_pages: 6, fetch_details: true}
+
+  - slug: linkedin-egypt-spring-boot
+    name: LinkedIn · Spring Boot in Egypt
+    source: linkedin
+    external_id: linkedin-egypt-spring-boot
+    target_region: EGYPT
+    careers_url: https://www.linkedin.com/jobs/
+    config: {keywords: spring boot, location: Egypt, time_posted: r2592000, max_pages: 5, fetch_details: true}
+
+  - slug: linkedin-egypt-software-engineer
+    name: LinkedIn · Software Engineer in Egypt
+    source: linkedin
+    external_id: linkedin-egypt-software-engineer
+    target_region: EGYPT
+    careers_url: https://www.linkedin.com/jobs/
+    config: {keywords: software engineer, location: Egypt, time_posted: r2592000, max_pages: 6, fetch_details: true}
+
+  - slug: linkedin-egypt-junior-software
+    name: LinkedIn · Junior Software in Egypt
+    source: linkedin
+    external_id: linkedin-egypt-junior-software
+    target_region: EGYPT
+    careers_url: https://www.linkedin.com/jobs/
+    config: {keywords: junior software engineer, location: Egypt, time_posted: r2592000, max_pages: 5, fetch_details: true}
+
+  # --- Wuzzuf (Egypt's #1 job board) ---
+  - slug: wuzzuf-java-egypt
+    name: Wuzzuf · Java
+    source: wuzzuf
+    external_id: wuzzuf-java-egypt
+    target_region: EGYPT
+    careers_url: https://wuzzuf.net/
+    config: {keywords: java, max_pages: 6}
+
+  - slug: wuzzuf-backend-egypt
+    name: Wuzzuf · Backend
+    source: wuzzuf
+    external_id: wuzzuf-backend-egypt
+    target_region: EGYPT
+    careers_url: https://wuzzuf.net/
+    config: {keywords: backend, max_pages: 6}
+
+  - slug: wuzzuf-software-engineer-egypt
+    name: Wuzzuf · Software Engineer
+    source: wuzzuf
+    external_id: wuzzuf-software-engineer-egypt
+    target_region: EGYPT
+    careers_url: https://wuzzuf.net/
+    config: {keywords: software engineer, max_pages: 6}
+
+  - slug: wuzzuf-spring-egypt
+    name: Wuzzuf · Spring Boot
+    source: wuzzuf
+    external_id: wuzzuf-spring-egypt
+    target_region: EGYPT
+    careers_url: https://wuzzuf.net/
+    config: {keywords: spring boot, max_pages: 4}
+
+  # --- Bayt.com (Mideast's largest job board, strong EG coverage) ---
+  - slug: bayt-java-egypt
+    name: Bayt · Java jobs (Egypt)
+    source: bayt
+    external_id: bayt-java-egypt
+    target_region: EGYPT
+    careers_url: https://www.bayt.com/en/egypt/
+    config: {keywords: java, max_pages: 4}
+
+  - slug: bayt-backend-egypt
+    name: Bayt · Backend jobs (Egypt)
+    source: bayt
+    external_id: bayt-backend-egypt
+    target_region: EGYPT
+    careers_url: https://www.bayt.com/en/egypt/
+    config: {keywords: backend, max_pages: 4}
+
+  - slug: bayt-software-engineer-egypt
+    name: Bayt · Software Engineer (Egypt)
+    source: bayt
+    external_id: bayt-software-engineer-egypt
+    target_region: EGYPT
+    careers_url: https://www.bayt.com/en/egypt/
+    config: {keywords: software engineer, max_pages: 4}

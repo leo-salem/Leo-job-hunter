@@ -1,0 +1,51 @@
+<tr id="job-{{ j.id }}">
+  <td class="score">
+    {% if j.ai_score is not none %}
+      <span class="badge badge-score" data-score="{{ j.ai_score|int }}">{{ j.ai_score|int }}</span>
+    {% else %}
+      <span class="badge badge-muted">—</span>
+    {% endif %}
+  </td>
+  <td>{{ j.company.name if j.company else '-' }}</td>
+  <td>
+    <a href="/jobs/{{ j.id }}" class="job-title">{{ j.title }}</a>
+    {% if j.ai_summary %}<div class="muted small">{{ j.ai_summary }}</div>{% endif %}
+  </td>
+  <td>
+    {{ j.location or '-' }}
+    {% if j.remote %}<span class="badge badge-blue">remote</span>{% endif %}
+  </td>
+  <td><span class="badge badge-grey">{{ j.source.value }}</span></td>
+  <td class="muted small">{{ j.posted_at.strftime('%Y-%m-%d') if j.posted_at else '-' }}</td>
+  <td class="actions">
+    <a class="btn btn-primary" href="{{ j.apply_url }}" target="_blank" rel="noopener">Open ↗</a>
+    <button class="btn btn-success"
+            hx-post="/jobs/{{ j.id }}/apply"
+            hx-target="#job-{{ j.id }}"
+            hx-swap="outerHTML"
+            title="Mark as Applied — kept in DB, hidden from default view">
+      Apply
+    </button>
+    <button class="btn btn-danger"
+            hx-post="/jobs/{{ j.id }}/submitted"
+            hx-target="#job-{{ j.id }}"
+            hx-swap="outerHTML"
+            hx-confirm="Delete this job permanently? It will not reappear, even on the next scrape."
+            title="Submitted — hard delete, gone forever">
+      Submitted
+    </button>
+    <button class="btn"
+            hx-post="/jobs/{{ j.id }}/favorite"
+            hx-target="#job-{{ j.id }}"
+            hx-swap="outerHTML">
+      {% if j.favorite %}★{% else %}☆{% endif %}
+    </button>
+    <button class="btn btn-warn"
+            hx-post="/jobs/{{ j.id }}/archive"
+            hx-target="#job-{{ j.id }}"
+            hx-swap="outerHTML"
+            hx-confirm="Archive this job?">
+      Archive
+    </button>
+  </td>
+</tr>

@@ -1,0 +1,26 @@
+You are scoring how well a single job posting matches a specific candidate.
+
+The candidate profile (constant):
+{resume_summary}
+
+You must return ONLY a JSON object on a single line, with this exact shape:
+{{"score": <integer 0-100>, "summary": "<<=240 chars why this is or isn't a fit>", "red_flags": ["<short bullet>", ...], "highlights": ["<short bullet>", ...]}}
+
+Scoring rubric:
+- 90-100: Java/Spring-Boot backend, 0-2 yrs or new-grad, USA/Europe/Remote, junior-friendly
+- 70-89:  Backend generalist or polyglot backend (Go/Python/Kotlin) at junior level
+- 50-69:  Adjacent role (full-stack with backend focus) or stronger experience requirement
+- 30-49:  Mostly mismatched (frontend, mobile, senior, infra-only, non-eng)
+- 0-29:   Clearly wrong (senior+ only, non-software, wrong geography)
+
+Job to score:
+
+Title: {title}
+Company: {company}
+Location: {location} (remote: {remote})
+Employment type: {employment_type}
+
+Description (may be truncated):
+{description}
+
+Return ONLY the JSON. No prose, no markdown fences, no commentary.

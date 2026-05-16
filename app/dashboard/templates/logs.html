@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}Scrape logs{% endblock %}
+{% block content %}
+<h1>Scrape logs</h1>
+
+<table class="jobs">
+  <thead>
+    <tr>
+      <th>Started</th>
+      <th>Source</th>
+      <th>Company</th>
+      <th>Status</th>
+      <th>Seen</th>
+      <th>New</th>
+      <th>Updated</th>
+      <th>Closed</th>
+      <th>Error</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for l in logs %}
+    <tr class="log-row log-{{ l.status }}">
+      <td class="muted small">{{ l.started_at.strftime('%Y-%m-%d %H:%M') if l.started_at else '-' }}</td>
+      <td>{% if l.source %}<span class="badge badge-grey">{{ l.source.value }}</span>{% endif %}</td>
+      <td>{{ l.company_slug or '-' }}</td>
+      <td>
+        {% if l.status == 'ok' %}<span class="badge badge-green">ok</span>
+        {% elif l.status == 'failed' %}<span class="badge badge-red">failed</span>
+        {% else %}<span class="badge badge-grey">{{ l.status }}</span>{% endif %}
+      </td>
+      <td>{{ l.jobs_seen }}</td>
+      <td>{{ l.jobs_new }}</td>
+      <td>{{ l.jobs_updated }}</td>
+      <td>{{ l.jobs_closed }}</td>
+      <td class="muted small">{{ l.error_message or '' }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

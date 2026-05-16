@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{% block title %}Job Hunter{% endblock %}</title>
+  <link rel="stylesheet" href="/static/app.css" />
+  <script src="https://unpkg.com/htmx.org@1.9.12" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <a href="/" class="brand">JobHunter</a>
+    {% set region = region or 'INTERNATIONAL' %}
+    {% set region_root = '/egypt' if region == 'EGYPT' else '/international' %}
+    <span class="region-pill region-{{ region|lower }}">{{ 'EG' if region == 'EGYPT' else 'US · EU' }}</span>
+    <nav class="nav">
+      <a href="{{ region_root }}">Active</a>
+      <a href="{{ region_root }}?status=APPLIED&lifecycle=ACTIVE,CLOSED,ARCHIVED">Applied</a>
+      <a href="{{ region_root }}?favorites=true">Favorites</a>
+      <a href="{{ region_root }}?lifecycle=CLOSED">Closed</a>
+      <a href="{{ region_root }}?lifecycle=ARCHIVED">Archived</a>
+      <a href="/logs">Logs</a>
+      <a href="/">↩ Switch region</a>
+    </nav>
+    <div class="actions">
+      <button class="btn btn-primary"
+              hx-post="/refresh"
+              hx-target="#refresh-status"
+              hx-swap="innerHTML"
+              hx-indicator="#refresh-status"
+              hx-disabled-elt="this"
+              hx-on::after-request="setTimeout(function(){ window.location.reload(); }, 800)"
+              hx-confirm="Run a fresh scrape now? This takes ~2 minutes — the page will reload when done.">
+        Refresh now
+      </button>
+      <span id="refresh-status" class="muted small refresh-status">
+        <span class="htmx-indicator">⏳ scraping… ~2 min, keep this tab open</span>
+      </span>
+    </div>
+  </header>
+  <main class="main">
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>

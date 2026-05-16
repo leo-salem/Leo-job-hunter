@@ -1,0 +1,12 @@
+.env
+.env.*
+!.env.example
+__pycache__/
+*.pyc
+.venv/
+venv/
+.idea/
+.vscode/
+data/wellfound_state.json
+data/*.png
+*.log

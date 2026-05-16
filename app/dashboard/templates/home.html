@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Job Hunter — pick a region</title>
+  <link rel="stylesheet" href="/static/app.css" />
+</head>
+<body class="home-body">
+  <main class="home">
+    <h1 class="home-title">JobHunter</h1>
+    <p class="home-sub">Pick a region to browse.</p>
+
+    <div class="home-cards">
+      <a class="home-card home-card--international" href="/international">
+        <div class="home-card-flag">US · EU</div>
+        <h2>Europe &amp; United States</h2>
+        <p class="muted">
+          Greenhouse, Lever, Ashby, Workday.
+          Stripe, OpenAI, Anthropic, Netflix, Spotify, GitLab, Figma + more.
+        </p>
+        <div class="home-card-count">{{ international_count }} active jobs</div>
+      </a>
+
+      <a class="home-card home-card--egypt" href="/egypt">
+        <div class="home-card-flag">EG</div>
+        <h2>Egypt</h2>
+        <p class="muted">
+          LinkedIn + Wuzzuf. Java developer / Spring Boot / backend / junior
+          roles in Cairo, Giza, Alexandria, &amp; remote.
+        </p>
+        <div class="home-card-count">{{ egypt_count }} active jobs</div>
+      </a>
+    </div>
+
+    <div class="home-footer muted small">
+      <a href="/logs">Logs</a> · last daily run: {{ last_run or 'never' }}
+    </div>
+  </main>
+</body>
+</html>

@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block title %}{{ job.title }} · {{ job.company.name if job.company else '' }}{% endblock %}
+{% block content %}
+<a href="/" class="back">← back to list</a>
+
+<h1 class="job-h1">{{ job.title }}</h1>
+<div class="muted">
+  {{ job.company.name if job.company else '' }}
+  · {{ job.location or 'Location unspecified' }}
+  · <span class="badge badge-grey">{{ job.source.value }}</span>
+  {% if job.remote %}<span class="badge badge-blue">remote</span>{% endif %}
+  · status: <strong>{{ job.application_status.value }}</strong>
+  · lifecycle: <strong>{{ job.lifecycle.value }}</strong>
+</div>
+
+<div class="job-actions">
+  <a class="btn btn-primary" href="{{ job.apply_url }}" target="_blank" rel="noopener">Open application ↗</a>
+  <form method="post" action="/jobs/{{ job.id }}/apply" style="display:inline">
+    <button class="btn btn-success" type="submit">Mark Applied</button>
+  </form>
+  <form method="post" action="/jobs/{{ job.id }}/reject" style="display:inline">
+    <button class="btn btn-warn" type="submit">Mark Rejected</button>
+  </form>
+  <form method="post" action="/jobs/{{ job.id }}/favorite" style="display:inline">
+    <button class="btn" type="submit">{% if job.favorite %}★ Unfavorite{% else %}☆ Favorite{% endif %}</button>
+  </form>
+  <form method="post" action="/jobs/{{ job.id }}/archive" style="display:inline">
+    <button class="btn btn-warn" type="submit">Archive</button>
+  </form>
+</div>
+
+{% if job.ai_score is not none %}
+<section class="card">
+  <h2>AI fit · <span class="badge badge-score" data-score="{{ job.ai_score|int }}">{{ job.ai_score|int }}</span></h2>
+  <p>{{ job.ai_summary or '(no summary)' }}</p>
+</section>
+{% endif %}
+
+{% if ai_enabled %}
+<section class="card">
+  <h2>AI helpers</h2>
+  <div class="ai-buttons">
+    <button class="btn"
+            hx-post="/jobs/{{ job.id }}/ai/cover-letter"
+            hx-target="#cover-letter-out"
+            hx-swap="innerHTML"
+            hx-indicator="#cover-spinner">
+      Generate cover letter
+    </button>
+    <span id="cover-spinner" class="htmx-indicator muted">generating…</span>
+    <pre id="cover-letter-out" class="ai-output"></pre>
+
+    <button class="btn"
+            hx-post="/jobs/{{ job.id }}/ai/tailored-summary"
+            hx-target="#summary-out"
+            hx-swap="innerHTML"
+            hx-indicator="#sum-spinner">
+      Tailored CV summary
+    </button>
+    <span id="sum-spinner" class="htmx-indicator muted">generating…</span>
+    <pre id="summary-out" class="ai-output"></pre>
+  </div>
+</section>
+{% endif %}
+
+<section class="card">
+  <h2>Notes</h2>
+  <form method="post" action="/jobs/{{ job.id }}/notes">
+    <textarea name="text" rows="4" placeholder="Personal notes about this job…">{{ job.notes or '' }}</textarea>
+    <button class="btn" type="submit">Save notes</button>
+  </form>
+</section>
+
+<section class="card">
+  <h2>Description</h2>
+  <article class="job-desc">{{ job.description_text or '(no description)' }}</article>
+</section>
+{% endblock %}
