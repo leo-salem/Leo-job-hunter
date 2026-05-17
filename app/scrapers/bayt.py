@@ -12,6 +12,8 @@ from app.db.models import Company
 from app.logging_setup import get_logger
 from app.schemas.job import RawJob
 from app.scrapers.base import BaseScraper, ScraperError, html_to_text
+from app.pipeline.filters import title_matches
+from app.utils.hashing import fingerprint
 from app.utils.http import get_text, http_client
 
 log = get_logger(__name__)
@@ -30,7 +32,10 @@ class BaytScraper(BaseScraper):
 
     BASE = "https://www.bayt.com"
 
-    async def fetch(self, company: Company) -> Iterable[RawJob]:
+    async def fetch(
+        self, company: Company, *, skip_fingerprints: set[str] | None = None
+    ) -> Iterable[RawJob]:
+        skip = skip_fingerprints or set()
         config = company.config or {}
         keywords = config.get("keywords")
         if not keywords:
@@ -72,14 +77,20 @@ class BaytScraper(BaseScraper):
 
             results: list[RawJob] = []
             for card in unique_cards:
+                if not title_matches(card["title"]):
+                    continue
+                card_fp = fingerprint("bayt", card["external_id"])
+                already_known = card_fp in skip
+
                 desc_html = None
                 desc_text = None
-                try:
-                    detail_html = await get_text(client, card["apply_url"])
-                    desc_html, desc_text = self._parse_detail(detail_html)
-                except Exception as e:  # noqa: BLE001
-                    log.debug("bayt_detail_failed", external_id=card["external_id"], error=str(e))
-                await asyncio.sleep(random.uniform(0.4, 1.0))
+                if not already_known:
+                    try:
+                        detail_html = await get_text(client, card["apply_url"])
+                        desc_html, desc_text = self._parse_detail(detail_html)
+                    except Exception as e:  # noqa: BLE001
+                        log.debug("bayt_detail_failed", external_id=card["external_id"], error=str(e))
+                    await asyncio.sleep(random.uniform(0.4, 1.0))
 
                 loc = card.get("location") or "Egypt"
                 results.append(

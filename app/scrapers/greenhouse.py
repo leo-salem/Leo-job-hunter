@@ -17,7 +17,7 @@ class GreenhouseScraper(BaseScraper):
 
     BASE = "https://boards-api.greenhouse.io/v1/boards/{token}/jobs?content=true"
 
-    async def fetch(self, company: Company) -> Iterable[RawJob]:
+    async def fetch(self, company: Company, *, skip_fingerprints: set[str] | None = None) -> Iterable[RawJob]:
         url = self.BASE.format(token=company.external_id)
         async with http_client() as client:
             try:

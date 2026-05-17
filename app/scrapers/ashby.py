@@ -17,7 +17,7 @@ class AshbyScraper(BaseScraper):
 
     BASE = "https://api.ashbyhq.com/posting-api/job-board/{org}?includeCompensation=true"
 
-    async def fetch(self, company: Company) -> Iterable[RawJob]:
+    async def fetch(self, company: Company, *, skip_fingerprints: set[str] | None = None) -> Iterable[RawJob]:
         url = self.BASE.format(org=company.external_id)
         async with http_client() as client:
             try:

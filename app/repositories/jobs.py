@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Sequence
 
-from sqlalchemy import and_, func, or_, select, update
+from sqlalchemy import and_, case, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -26,6 +26,13 @@ async def fingerprints_for_company(session: AsyncSession, company_id: int) -> se
         Job.company_id == company_id,
         Job.lifecycle == JobLifecycle.ACTIVE,
     )
+    return {row[0] for row in (await session.execute(stmt)).all()}
+
+
+async def all_fingerprints_for_company(session: AsyncSession, company_id: int) -> set[str]:
+    """All known fingerprints regardless of lifecycle - used to skip detail
+    fetches in scrapers that have separate per-job detail endpoints."""
+    stmt = select(Job.fingerprint).where(Job.company_id == company_id)
     return {row[0] for row in (await session.execute(stmt)).all()}
 
 
@@ -93,7 +100,7 @@ async def search_jobs(
     if favorites_only:
         conditions.append(Job.favorite.is_(True))
     if min_score is not None:
-        conditions.append(Job.ai_score >= min_score)
+        conditions.append(Job.heuristic_score >= min_score)
     if query:
         like = f"%{query.lower()}%"
         conditions.append(
@@ -103,7 +110,7 @@ async def search_jobs(
         stmt = stmt.where(and_(*conditions))
 
     if order_by == "score":
-        stmt = stmt.order_by(Job.ai_score.desc().nullslast(), Job.first_seen_at.desc())
+        stmt = stmt.order_by(Job.heuristic_score.desc().nullslast(), Job.first_seen_at.desc())
     elif order_by == "newest":
         stmt = stmt.order_by(Job.first_seen_at.desc())
     elif order_by == "company":

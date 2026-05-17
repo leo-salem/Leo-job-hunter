@@ -15,7 +15,6 @@ from app.api.routes import companies as companies_routes
 from app.api.routes import jobs as jobs_routes
 from app.api.routes import logs as logs_routes
 from app.api.routes import trigger as trigger_routes
-from app.config import settings
 from app.db.models import ApplicationStatus, JobLifecycle, Region, Source
 from app.logging_setup import configure_logging, get_logger
 from app.repositories import jobs as jobs_repo
@@ -194,7 +193,57 @@ async def dashboard_job(
             "request": request,
             "job": job,
             "region": job.region.value,
-            "ai_enabled": settings.ai_ready,
+        },
+    )
+
+
+@app.get("/jobs/{job_id}/score-debug", response_class=HTMLResponse)
+async def score_debug(
+    request: Request, job_id: int, session: AsyncSession = SessionDep
+):
+    """Why did this job score what it scored?
+
+    Recomputes features live (in case the engine changed since the row was
+    scored) but uses the stored breakdown when available."""
+    from app.pipeline.scoring_features import build_features
+    from app.pipeline.scoring_strategy import strategy_for
+
+    job = await jobs_repo.get_by_id(session, job_id)
+    if job is None:
+        raise HTTPException(404, "job not found")
+    _ = job.company
+
+    features = build_features(
+        title=job.title,
+        description_text=job.description_text,
+        remote=job.remote,
+        country=job.country,
+        region=job.region,
+        posted_at=job.posted_at,
+        company_name=job.company.name if job.company else None,
+        source=job.source.value,
+    )
+    strategy = strategy_for(job.region)
+    features_view = {
+        "title_norm": features.title_norm,
+        "seniority": features.seniority.value,
+        "specialization": features.specialization.value,
+        "exp_required": features.experience.required_years,
+        "exp_grad_friendly": features.experience.has_grad_friendly_phrase,
+        "stack_title": sorted(features.stack_in_title_keys),
+        "stack_desc": sorted(features.stack_keys - features.stack_in_title_keys),
+        "description_chars": features.description_chars,
+    }
+
+    return templates.TemplateResponse(
+        "score_debug.html",
+        {
+            "request": request,
+            "job": job,
+            "region": job.region.value,
+            "b": job.score_breakdown,
+            "features": features_view,
+            "strategy_description": strategy.description,
         },
     )
 
@@ -301,52 +350,12 @@ async def save_notes(
     return RedirectResponse(url=f"/jobs/{job_id}", status_code=303)
 
 
-@app.post("/jobs/{job_id}/ai/cover-letter", response_class=HTMLResponse)
-async def htmx_cover_letter(job_id: int):
-    if not settings.ai_ready:
-        return HTMLResponse("<em>AI disabled — set ANTHROPIC_API_KEY to enable.</em>", status_code=200)
-    from app.ai.cover_letter import generate_cover_letter
-
-    try:
-        text = await generate_cover_letter(job_id)
-    except Exception as e:  # noqa: BLE001
-        return HTMLResponse(f"<em>Error: {e}</em>", status_code=200)
-    return HTMLResponse(_escape(text))
-
-
-@app.post("/jobs/{job_id}/ai/tailored-summary", response_class=HTMLResponse)
-async def htmx_tailored(job_id: int):
-    if not settings.ai_ready:
-        return HTMLResponse("<em>AI disabled — set ANTHROPIC_API_KEY to enable.</em>", status_code=200)
-    from app.ai.resume_tailor import generate_tailored_summary
-
-    try:
-        text = await generate_tailored_summary(job_id)
-    except Exception as e:  # noqa: BLE001
-        return HTMLResponse(f"<em>Error: {e}</em>", status_code=200)
-    return HTMLResponse(_escape(text))
-
-
 @app.post("/refresh", response_class=HTMLResponse)
 async def refresh_synchronous():
-    """Run the full scrape pipeline inline. Blocks until done (~2 min).
-
-    Returns a small JSON-ish summary as HTML; the browser then reloads
-    the dashboard via hx-on::after-request.
-    """
+    """Run the full scrape pipeline inline. Blocks until done (~2 min)."""
     from app.pipeline.orchestrator import run_daily
 
     result = await run_daily()
-
-    # Kick off AI scoring of any new jobs (async, fire-and-forget)
-    if settings.ai_ready:
-        try:
-            from app.tasks.analyze import analyze_recent_jobs
-
-            analyze_recent_jobs.apply_async(countdown=2)
-        except Exception:  # noqa: BLE001
-            pass
-
     return HTMLResponse(
         f'<span class="muted small">Refresh complete: '
         f'+{result.total_new} new, {result.total_updated} updated, '
@@ -375,7 +384,3 @@ def _parse_enum_list(value: str, enum_cls):
     return out or None
 
 
-def _escape(text: str) -> str:
-    import html
-
-    return html.escape(text or "").replace("\n", "<br>")

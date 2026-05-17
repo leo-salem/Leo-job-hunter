@@ -3,7 +3,7 @@
 # Every run of this script does ALL of the following:
 #   1. Brings up the Docker stack (postgres, redis, api, worker, migrate)
 #   2. Seeds companies (idempotent; new entries in companies.yaml are added)
-#   3. Runs a FRESH scrape — every source is hit again, new jobs added,
+#   3. Runs a FRESH scrape - every source is hit again, new jobs added,
 #      tombstoned jobs (ones you clicked "Submitted") are NEVER re-added
 #   4. Opens http://localhost:8000 in your browser
 
@@ -24,7 +24,7 @@ try {
 if (-not (Test-Path ".env")) {
     Copy-Item ".env.example" ".env"
     Write-Host "    Created .env from .env.example" -ForegroundColor Yellow
-    Write-Host "    Edit it later to set ANTHROPIC_API_KEY for AI scoring." -ForegroundColor Yellow
+    Write-Host "    (Scoring is fully local - no API keys required.)" -ForegroundColor Yellow
 }
 
 # 3. Build (cached after first run) + start containers.
@@ -55,7 +55,7 @@ docker compose exec -T api python -m scripts.seed_companies
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 # 6. ALWAYS run a fresh scrape now. ~2 min depending on source responsiveness.
-#    This is the only way scrapes happen — no midnight cron, no startup-catchup.
+#    This is the only way scrapes happen - no midnight cron, no startup-catchup.
 Write-Host "==> Running a fresh scrape (~2 min)..." -ForegroundColor Cyan
 docker compose exec -T api python -m scripts.run_once
 if ($LASTEXITCODE -ne 0) {

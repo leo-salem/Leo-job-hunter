@@ -1,5 +1,5 @@
 # Stop all job-hunter containers.
-# Volumes (pgdata, redisdata) are PRESERVED — your jobs and Applied/Submitted
+# Volumes (pgdata, redisdata) are PRESERVED - your jobs and Applied/Submitted
 # history survive. To wipe data too, run: docker compose down -v
 $ErrorActionPreference = "Stop"
 Set-Location $PSScriptRoot

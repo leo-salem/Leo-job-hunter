@@ -1,7 +1,11 @@
 <tr id="job-{{ j.id }}">
   <td class="score">
-    {% if j.ai_score is not none %}
-      <span class="badge badge-score" data-score="{{ j.ai_score|int }}">{{ j.ai_score|int }}</span>
+    {% if j.heuristic_score is not none %}
+      {% set label = (j.score_breakdown or {}).get('quality_label') or '' %}
+      <a href="/jobs/{{ j.id }}/score-debug"
+         class="badge badge-score quality-{{ label|lower|replace(' ', '-') }}"
+         title="{{ label }} · confidence {{ j.heuristic_confidence|int if j.heuristic_confidence else '?' }}/100 · click to see why"
+         style="text-decoration: none;">{{ j.heuristic_score|int }}</a>
     {% else %}
       <span class="badge badge-muted">—</span>
     {% endif %}

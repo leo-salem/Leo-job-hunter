@@ -35,7 +35,7 @@ class WellfoundScraper(BaseScraper):
         "roles[]=Backend+Engineer&yearsExperience[]=0-2&yearsExperience[]=2-4"
     )
 
-    async def fetch(self, company: Company) -> Iterable[RawJob]:
+    async def fetch(self, company: Company, *, skip_fingerprints: set[str] | None = None) -> Iterable[RawJob]:
         if not settings.wellfound_enabled:
             log.info("wellfound_disabled", company=company.slug)
             return []

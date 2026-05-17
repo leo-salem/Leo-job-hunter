@@ -12,8 +12,10 @@ from app.db.models import Company
 from app.logging_setup import get_logger
 from app.schemas.job import RawJob
 from app.scrapers.base import BaseScraper, ScraperError, html_to_text
+from app.pipeline.filters import title_matches
+from app.utils.hashing import fingerprint
 from app.utils.http import get_text, http_client
-from app.utils.time import parse_dt
+from app.utils.time import parse_dt  # noqa: F401
 
 log = get_logger(__name__)
 
@@ -33,7 +35,10 @@ class WuzzufScraper(BaseScraper):
 
     SEARCH_URL = "https://wuzzuf.net/search/jobs/"
 
-    async def fetch(self, company: Company) -> Iterable[RawJob]:
+    async def fetch(
+        self, company: Company, *, skip_fingerprints: set[str] | None = None
+    ) -> Iterable[RawJob]:
+        skip = skip_fingerprints or set()
         config = company.config or {}
         keywords = config.get("keywords") or ""
         if not keywords:
@@ -79,20 +84,32 @@ class WuzzufScraper(BaseScraper):
             unique_cards = [c for c in cards if not (c["external_id"] in seen or seen.add(c["external_id"]))]
 
             results: list[RawJob] = []
+            skipped_known = 0
+            skipped_title = 0
             for card in unique_cards:
+                if not title_matches(card["title"]):
+                    skipped_title += 1
+                    continue
+
+                card_fp = fingerprint("wuzzuf", card["external_id"])
+                already_known = card_fp in skip
+
                 desc_html = None
                 desc_text = None
-                try:
-                    detail_html = await get_text(client, card["apply_url"])
-                    desc_html, desc_text = self._parse_detail(detail_html)
-                except Exception as e:  # noqa: BLE001
-                    log.debug(
-                        "wuzzuf_detail_failed",
-                        company=company.slug,
-                        job_id=card["external_id"],
-                        error=str(e),
-                    )
-                await asyncio.sleep(random.uniform(0.4, 1.0))
+                if not already_known:
+                    try:
+                        detail_html = await get_text(client, card["apply_url"])
+                        desc_html, desc_text = self._parse_detail(detail_html)
+                    except Exception as e:  # noqa: BLE001
+                        log.debug(
+                            "wuzzuf_detail_failed",
+                            company=company.slug,
+                            job_id=card["external_id"],
+                            error=str(e),
+                        )
+                    await asyncio.sleep(random.uniform(0.4, 1.0))
+                else:
+                    skipped_known += 1
 
                 results.append(
                     RawJob(
@@ -113,6 +130,14 @@ class WuzzufScraper(BaseScraper):
                         },
                     )
                 )
+            log.info(
+                "wuzzuf_fetch_done",
+                company=company.slug,
+                total_cards=len(unique_cards),
+                accepted=len(results),
+                skipped_by_title=skipped_title,
+                skipped_known=skipped_known,
+            )
             return results
 
     def _parse_list(self, html: str) -> list[dict]:

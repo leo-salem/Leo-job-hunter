@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import asyncio
+from contextlib import AsyncExitStack
 from dataclasses import dataclass
 
 from sqlalchemy.exc import IntegrityError
 
-from app.db.models import Company
+from app.config import settings
+from app.db.models import Company, Source
 from app.db.session import session_scope
 from app.logging_setup import get_logger
 from app.pipeline.dedupe import job_fingerprint
@@ -53,25 +56,58 @@ class RunResult:
 
 
 async def run_daily() -> RunResult:
-    """Scrape every active company. Never raise — log each failure individually."""
+    """Scrape every active company concurrently. Two layers of throttling:
+
+    1. Global semaphore (DAILY_CONCURRENCY): total concurrent companies.
+    2. Per-source semaphores: e.g. at most 1 LinkedIn search at a time,
+       at most 2 Wuzzuf searches at a time, regardless of global slots free.
+
+    Greenhouse / Lever / Ashby use only the global limit since they're
+    stable JSON APIs that handle concurrent requests fine.
+
+    Never raises - each company failure is isolated to its own task.
+    """
     async with session_scope() as session:
         all_companies = await companies_repo.list_active(session)
 
-    results: list[CompanyResult] = []
-    for company in all_companies:
-        try:
-            results.append(await _process_company(company))
-        except Exception as e:  # noqa: BLE001
-            log.exception("company_run_unexpected_failure", company=company.slug)
-            results.append(
-                CompanyResult(
+    concurrency = max(1, settings.daily_concurrency)
+    global_sem = asyncio.Semaphore(concurrency)
+    source_sems: dict[Source, asyncio.Semaphore] = {
+        Source.LINKEDIN:  asyncio.Semaphore(max(1, settings.linkedin_concurrency)),
+        Source.WUZZUF:    asyncio.Semaphore(max(1, settings.wuzzuf_concurrency)),
+        Source.BAYT:      asyncio.Semaphore(max(1, settings.bayt_concurrency)),
+        Source.WORKDAY:   asyncio.Semaphore(max(1, settings.workday_concurrency)),
+        Source.WELLFOUND: asyncio.Semaphore(max(1, settings.wellfound_concurrency)),
+    }
+
+    log.info(
+        "daily_run_starting",
+        companies=len(all_companies),
+        global_concurrency=concurrency,
+        linkedin=settings.linkedin_concurrency,
+        wuzzuf=settings.wuzzuf_concurrency,
+    )
+
+    async def _bounded(company: Company) -> CompanyResult:
+        async with AsyncExitStack() as stack:
+            # Always acquire the global semaphore
+            await stack.enter_async_context(global_sem)
+            # Layer the per-source semaphore on top, if one applies
+            ssem = source_sems.get(company.source)
+            if ssem is not None:
+                await stack.enter_async_context(ssem)
+            try:
+                return await _process_company(company)
+            except Exception as e:  # noqa: BLE001
+                log.exception("company_run_unexpected_failure", company=company.slug)
+                return CompanyResult(
                     company_slug=company.slug,
                     status="failed",
                     error=f"{type(e).__name__}: {e}",
                 )
-            )
 
-    # Only record success if at least one company completed cleanly
+    results = list(await asyncio.gather(*(_bounded(c) for c in all_companies)))
+
     if any(r.status == "ok" for r in results):
         async with session_scope() as session:
             await scrape_logs_repo.mark_daily_success(session)
@@ -98,9 +134,14 @@ async def _process_company(company: Company) -> CompanyResult:
         )
         scrape_log_id = scrape_log.id
 
+    # Pre-load known fingerprints so detail-fetching scrapers can skip
+    # the expensive per-job HTTP call for jobs we already have.
+    async with session_scope() as session:
+        known_fps = await jobs_repo.all_fingerprints_for_company(session, company.id)
+
     scraper = get_scraper(company.source)
     try:
-        raw_jobs = list(await scraper.fetch(company))
+        raw_jobs = list(await scraper.fetch(company, skip_fingerprints=known_fps))
     except ScraperError as e:
         await _finalize_failure(scrape_log_id, e, "ScraperError")
         result.status = "failed"
@@ -133,7 +174,7 @@ async def _process_company(company: Company) -> CompanyResult:
     async with session_scope() as session:
         for raw, country in accepted:
             try:
-                outcome = await _upsert_job(session, company.id, raw, country, company.target_region)
+                outcome = await _upsert_job(session, company.id, raw, country, company.target_region, company.name)
                 if outcome == "new":
                     result.new += 1
                 elif outcome == "updated":
@@ -165,12 +206,12 @@ async def _process_company(company: Company) -> CompanyResult:
     return result
 
 
-async def _upsert_job(session, company_id: int, raw, country: str | None, region) -> str:
+async def _upsert_job(session, company_id: int, raw, country: str | None, region, company_name: str | None = None) -> str:
     """Returns 'new' | 'updated' | 'noop'."""
     fp = job_fingerprint(raw)
     existing = await jobs_repo.get_by_fingerprint(session, fp)
     if existing is None:
-        session.add(new_job_from_raw(raw, company_id=company_id, normalized_country=country, region=region))
+        session.add(new_job_from_raw(raw, company_id=company_id, normalized_country=country, region=region, company_name=company_name))
         try:
             await session.flush()
             return "new"
@@ -180,7 +221,7 @@ async def _upsert_job(session, company_id: int, raw, country: str | None, region
             existing = await jobs_repo.get_by_fingerprint(session, fp)
             if existing is None:
                 return "noop"
-    changed = apply_updates(existing, raw, normalized_country=country)
+    changed = apply_updates(existing, raw, normalized_country=country, company_name=company_name)
     existing.last_seen_at = now_utc()
     return "updated" if changed else "noop"
 

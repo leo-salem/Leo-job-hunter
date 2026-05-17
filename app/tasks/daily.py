@@ -10,7 +10,7 @@ log = get_logger(__name__)
 
 
 @celery.task(
-    name="app.tasks.daily.daily_scrape_and_analyze",
+    name="app.tasks.daily.daily_scrape",
     bind=True,
     autoretry_for=(Exception,),
     retry_backoff=True,
@@ -18,7 +18,8 @@ log = get_logger(__name__)
     retry_jitter=True,
     max_retries=3,
 )
-def daily_scrape_and_analyze(self) -> dict:
+def daily_scrape(self) -> dict:
+    """Full pipeline: scrape every active company, filter, dedupe, score locally."""
     configure_logging()
     log.info("daily_task_starting", attempt=self.request.retries + 1)
     result = asyncio.run(run_daily())
@@ -29,11 +30,5 @@ def daily_scrape_and_analyze(self) -> dict:
         "closed": result.total_closed,
         "failed": result.total_failed,
     }
-
-    # Trigger AI analysis of newly added active jobs
-    from app.tasks.analyze import analyze_recent_jobs
-
-    analyze_recent_jobs.apply_async(countdown=5)
-
     log.info("daily_task_complete", **summary)
     return summary

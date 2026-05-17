@@ -12,6 +12,8 @@ from app.db.models import Company
 from app.logging_setup import get_logger
 from app.schemas.job import RawJob
 from app.scrapers.base import BaseScraper, ScraperError, html_to_text
+from app.pipeline.filters import title_matches
+from app.utils.hashing import fingerprint
 from app.utils.http import get_text, http_client
 from app.utils.time import parse_dt
 
@@ -36,7 +38,10 @@ class LinkedInScraper(BaseScraper):
     )
     DETAIL_URL = "https://www.linkedin.com/jobs-guest/jobs/api/jobPosting/{job_id}"
 
-    async def fetch(self, company: Company) -> Iterable[RawJob]:
+    async def fetch(
+        self, company: Company, *, skip_fingerprints: set[str] | None = None
+    ) -> Iterable[RawJob]:
+        skip = skip_fingerprints or set()
         config = company.config or {}
         keywords = config.get("keywords")
         location = config.get("location")
@@ -98,10 +103,25 @@ class LinkedInScraper(BaseScraper):
                     unique_cards.append(c)
 
             results: list[RawJob] = []
+            skipped_known = 0
+            skipped_title = 0
             for card in unique_cards:
+                # OPTIMIZATION 1: skip cards whose title clearly doesn't match
+                # the job filter. Avoids paying the ~1s polite detail-fetch
+                # cost for jobs the pipeline would discard anyway.
+                if not title_matches(card["title"]):
+                    skipped_title += 1
+                    continue
+
+                # OPTIMIZATION 2: if this job already exists in the DB, emit
+                # a stub card so the orchestrator still touches last_seen_at
+                # without re-paying for detail fetch.
+                card_fp = fingerprint("linkedin", card["external_id"])
+                already_known = card_fp in skip
+
                 desc_html = None
                 desc_text = None
-                if fetch_details:
+                if fetch_details and not already_known:
                     try:
                         detail_html = await get_text(
                             client, self.DETAIL_URL.format(job_id=card["external_id"])
@@ -114,8 +134,9 @@ class LinkedInScraper(BaseScraper):
                             job_id=card["external_id"],
                             error=str(e),
                         )
-                    # Detail-fetch jitter is critical for politeness
                     await asyncio.sleep(random.uniform(0.6, 1.5))
+                elif already_known:
+                    skipped_known += 1
 
                 results.append(
                     RawJob(
@@ -138,6 +159,14 @@ class LinkedInScraper(BaseScraper):
                     )
                 )
 
+            log.info(
+                "linkedin_fetch_done",
+                company=company.slug,
+                total_cards=len(unique_cards),
+                accepted=len(results),
+                skipped_by_title=skipped_title,
+                skipped_known=skipped_known,
+            )
             return results
 
     def _parse_list(self, html: str) -> list[dict]:

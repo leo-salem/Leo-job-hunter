@@ -29,7 +29,7 @@ class WorkdayScraper(BaseScraper):
 
     source = "workday"
 
-    async def fetch(self, company: Company) -> Iterable[RawJob]:
+    async def fetch(self, company: Company, *, skip_fingerprints: set[str] | None = None) -> Iterable[RawJob]:
         config = company.config or {}
         host = config.get("host")
         tenant = config.get("tenant")

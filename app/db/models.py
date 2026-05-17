@@ -133,9 +133,11 @@ class Job(Base):
     favorite: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     notes: Mapped[Optional[str]] = mapped_column(Text)
 
-    # AI
-    ai_score: Mapped[Optional[float]] = mapped_column(Float)
-    ai_summary: Mapped[Optional[str]] = mapped_column(Text)
+    # Local rule-based score (0-100) — populated by app.pipeline.scoring
+    heuristic_score: Mapped[Optional[float]] = mapped_column(Float)
+    heuristic_confidence: Mapped[Optional[float]] = mapped_column(Float)
+    # Full triggered-rules breakdown for the score-debug page
+    score_breakdown: Mapped[Optional[dict]] = mapped_column(JSON)
 
     # Internal
     first_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
@@ -143,34 +145,12 @@ class Job(Base):
     raw_payload: Mapped[Optional[dict]] = mapped_column(JSON)
 
     company: Mapped[Company] = relationship(back_populates="jobs")
-    ai_analyses: Mapped[list["AIAnalysis"]] = relationship(back_populates="job", cascade="all, delete-orphan")
 
     __table_args__ = (
         Index("ix_jobs_lifecycle_status", "lifecycle", "application_status"),
         Index("ix_jobs_country_remote", "country", "remote"),
-        Index("ix_jobs_ai_score", "ai_score"),
         Index("ix_jobs_first_seen", "first_seen_at"),
         Index("ix_jobs_region_lifecycle_status", "region", "lifecycle", "application_status"),
-    )
-
-
-class AIAnalysis(Base):
-    __tablename__ = "ai_analyses"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    job_id: Mapped[int] = mapped_column(ForeignKey("jobs.id", ondelete="CASCADE"), nullable=False)
-    kind: Mapped[str] = mapped_column(String(40), nullable=False)  # score | cover_letter | resume_summary
-    prompt_hash: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
-    model: Mapped[str] = mapped_column(String(80), nullable=False)
-    content: Mapped[str] = mapped_column(Text, nullable=False)
-    score: Mapped[Optional[float]] = mapped_column(Float)
-    extra: Mapped[dict] = mapped_column(JSON, default=dict)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-
-    job: Mapped[Job] = relationship(back_populates="ai_analyses")
-
-    __table_args__ = (
-        UniqueConstraint("job_id", "kind", "prompt_hash", name="uq_ai_analyses_job_kind_hash"),
     )
 
 

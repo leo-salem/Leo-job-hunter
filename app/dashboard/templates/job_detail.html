@@ -29,39 +29,24 @@
   </form>
 </div>
 
-{% if job.ai_score is not none %}
+{% if job.heuristic_score is not none %}
 <section class="card">
-  <h2>AI fit · <span class="badge badge-score" data-score="{{ job.ai_score|int }}">{{ job.ai_score|int }}</span></h2>
-  <p>{{ job.ai_summary or '(no summary)' }}</p>
+  <h2>
+    Fit · <span class="badge badge-score">{{ job.heuristic_score|int }}</span>
+    {% set label = (job.score_breakdown or {}).get('quality_label') %}
+    {% if label %}<span class="badge quality-{{ label|lower|replace(' ', '-') }}" style="margin-left:6px;">{{ label }}</span>{% endif %}
+    <span class="muted small" style="margin-left:8px;">confidence {{ job.heuristic_confidence|int if job.heuristic_confidence else '?' }}/100</span>
+  </h2>
+  {% if job.score_breakdown %}
+    {% set pos = job.score_breakdown.positives[:4] %}
+    {% set neg = job.score_breakdown.negatives[:3] %}
+    {% if pos %}<p class="muted small"><strong style="color: var(--green);">+</strong> {{ pos|join(' &middot; ')|safe }}</p>{% endif %}
+    {% if neg %}<p class="muted small"><strong style="color: var(--red);">−</strong> {{ neg|join(' &middot; ')|safe }}</p>{% endif %}
+    <a href="/jobs/{{ job.id }}/score-debug" class="btn">See full breakdown →</a>
+  {% endif %}
 </section>
 {% endif %}
 
-{% if ai_enabled %}
-<section class="card">
-  <h2>AI helpers</h2>
-  <div class="ai-buttons">
-    <button class="btn"
-            hx-post="/jobs/{{ job.id }}/ai/cover-letter"
-            hx-target="#cover-letter-out"
-            hx-swap="innerHTML"
-            hx-indicator="#cover-spinner">
-      Generate cover letter
-    </button>
-    <span id="cover-spinner" class="htmx-indicator muted">generating…</span>
-    <pre id="cover-letter-out" class="ai-output"></pre>
-
-    <button class="btn"
-            hx-post="/jobs/{{ job.id }}/ai/tailored-summary"
-            hx-target="#summary-out"
-            hx-swap="innerHTML"
-            hx-indicator="#sum-spinner">
-      Tailored CV summary
-    </button>
-    <span id="sum-spinner" class="htmx-indicator muted">generating…</span>
-    <pre id="summary-out" class="ai-output"></pre>
-  </div>
-</section>
-{% endif %}
 
 <section class="card">
   <h2>Notes</h2>

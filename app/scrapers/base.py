@@ -30,9 +30,22 @@ class BaseScraper(ABC):
     source: str = ""
 
     @abstractmethod
-    async def fetch(self, company: Company) -> Iterable[RawJob]:
+    async def fetch(
+        self,
+        company: Company,
+        *,
+        skip_fingerprints: set[str] | None = None,
+    ) -> Iterable[RawJob]:
         """Yield/return all currently-listed jobs for a company.
 
-        Implementations must NOT raise on partial failures inside the page —
+        Implementations must NOT raise on partial failures inside the page -
         log them and continue. They MAY raise ScraperError for total failure.
+
+        `skip_fingerprints` is an optimisation hint: for scrapers that do
+        separate per-job detail fetches (LinkedIn, Wuzzuf, Bayt, Workday),
+        cards whose computed fingerprint is in this set should still be
+        emitted (so closed-detection works) but with description fields
+        left as None to skip the expensive detail HTTP call. Scrapers that
+        get descriptions in the list response (Greenhouse, Lever, Ashby)
+        can ignore this parameter.
         """

@@ -3,7 +3,6 @@ from __future__ import annotations
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -26,12 +25,6 @@ class Settings(BaseSettings):
     celery_broker_url: str = "redis://redis:6379/1"
     celery_result_backend: str = "redis://redis:6379/2"
 
-    # Anthropic
-    anthropic_api_key: str = ""
-    anthropic_model: str = "claude-sonnet-4-6"
-    ai_enabled: bool = True
-    ai_max_jobs_per_run: int = 80
-
     # HTTP
     http_timeout_seconds: int = 30
     http_max_retries: int = 4
@@ -47,12 +40,20 @@ class Settings(BaseSettings):
     # Catchup
     catchup_threshold_hours: int = 20
 
-    # Resume
-    resume_summary: str = Field(default="")
+    # Daily scrape concurrency. With 4, up to 4 companies are processed
+    # simultaneously. Lower if LinkedIn/Wuzzuf start rate-limiting; raise
+    # if your DB pool can handle more (pool_size + max_overflow = 20).
+    daily_concurrency: int = 4
 
-    @property
-    def ai_ready(self) -> bool:
-        return self.ai_enabled and bool(self.anthropic_api_key)
+    # Per-source concurrency caps. These layer on top of daily_concurrency
+    # so that even if 4 global slots are free, at most N of them go to the
+    # same rate-limited source. Sources not listed (greenhouse / lever /
+    # ashby) use only daily_concurrency.
+    linkedin_concurrency: int = 1   # LinkedIn guest endpoint is the most rate-limited
+    wuzzuf_concurrency: int = 2
+    bayt_concurrency: int = 2
+    workday_concurrency: int = 2
+    wellfound_concurrency: int = 1
 
     @property
     def project_root(self) -> Path:

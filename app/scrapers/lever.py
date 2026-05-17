@@ -17,7 +17,7 @@ class LeverScraper(BaseScraper):
 
     BASE = "https://api.lever.co/v0/postings/{site}?mode=json"
 
-    async def fetch(self, company: Company) -> Iterable[RawJob]:
+    async def fetch(self, company: Company, *, skip_fingerprints: set[str] | None = None) -> Iterable[RawJob]:
         url = self.BASE.format(site=company.external_id)
         async with http_client() as client:
             try:

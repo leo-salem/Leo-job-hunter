@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block title %}Why this score · {{ job.title }}{% endblock %}
+{% block content %}
+<a href="/jobs/{{ job.id }}" class="back">← back to job</a>
+
+<h1 class="job-h1">Score breakdown</h1>
+<div class="muted">
+  {{ job.title }} · {{ job.company.name if job.company else '' }}
+  · <span class="badge badge-grey">{{ job.source.value }}</span>
+</div>
+
+<section class="card">
+  <h2>
+    Final score: <span class="badge badge-score">{{ (b.score if b else 0)|int }}</span>
+    <span class="muted small" style="margin-left: 10px;">
+      (raw {{ b.raw_score if b else 0 }} clamped to 0–100)
+    </span>
+  </h2>
+  <p class="muted">
+    Strategy: <strong>{{ b.strategy if b else 'n/a' }}</strong> &nbsp;·&nbsp;
+    Confidence: <strong>{{ b.confidence if b else 0 }} / 100</strong>
+  </p>
+  {% if b and b.confidence < 40 %}
+    <p class="muted small">Low confidence — likely thin description or conflicting signals.</p>
+  {% endif %}
+</section>
+
+{% if b and b.positives %}
+<section class="card">
+  <h2 style="color: var(--green);">+ Positive signals ({{ b.positives|length }})</h2>
+  <ul class="rules-list">
+    {% for r in b.triggered_rules if r.final_points > 0 %}
+    <li>
+      <span class="badge badge-green">+{{ r.final_points }}</span>
+      <span class="rule-name">{{ r.reason }}</span>
+      <span class="muted small">[{{ r.category }} · {{ r.name }}{% if r.base_points != r.final_points %} · base {{ r.base_points }} × {{ (r.final_points / r.base_points)|round(2) }}{% endif %}]</span>
+    </li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
+
+{% if b and b.negatives %}
+<section class="card">
+  <h2 style="color: var(--red);">− Negative signals ({{ b.negatives|length }})</h2>
+  <ul class="rules-list">
+    {% for r in b.triggered_rules if r.final_points < 0 %}
+    <li>
+      <span class="badge badge-red">{{ r.final_points }}</span>
+      <span class="rule-name">{{ r.reason }}</span>
+      <span class="muted small">[{{ r.category }} · {{ r.name }}]</span>
+    </li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
+
+<section class="card">
+  <h2>Detected features</h2>
+  <table class="kv-table">
+    <tr><th>Seniority</th><td>{{ features.seniority }}</td></tr>
+    <tr><th>Specialization</th><td>{{ features.specialization }}</td></tr>
+    <tr><th>Required years</th><td>{{ features.exp_required if features.exp_required is not none else '—' }}</td></tr>
+    <tr><th>Grad-friendly</th><td>{{ 'yes' if features.exp_grad_friendly else 'no' }}</td></tr>
+    <tr><th>Stack (title)</th><td>{{ features.stack_title|join(', ') or '—' }}</td></tr>
+    <tr><th>Stack (description)</th><td>{{ features.stack_desc|join(', ') or '—' }}</td></tr>
+    <tr><th>Normalized title</th><td><code>{{ features.title_norm }}</code></td></tr>
+    <tr><th>Description chars</th><td>{{ features.description_chars }}</td></tr>
+  </table>
+</section>
+
+<section class="card">
+  <h2>Strategy explanation</h2>
+  <p>{{ strategy_description }}</p>
+</section>
+{% endblock %}

@@ -1,73 +1,14 @@
 # Job Hunter
 
 A personal, local-first job-hunting assistant. It scrapes public job sources on
-demand, filters the results to junior / backend / Java roles in either the
-United States and Europe or in Egypt, optionally scores each job with Claude
-for fit against a stored resume summary, and serves a dashboard for you to
-triage and track applications.
+demand, filters to junior / backend / Java roles in either the United States
+and Europe or in Egypt, scores each job 0-100 with a deterministic local rule
+engine (no AI, no API keys, no telemetry), and serves an HTMX dashboard for
+triaging and tracking applications.
 
-Everything runs in Docker on your own machine. No notifications, no auto-apply,
-no third-party logins, no telemetry.
-
----
-
-## What it does
-
-- Pulls jobs from public APIs and search endpoints (Greenhouse, Lever, Ashby,
-  LinkedIn guest search, Wuzzuf, Bayt, and optionally Workday and Wellfound).
-- Filters by job title (Software / Backend / Java / Junior / New Grad), drops
-  the obvious noise (senior, manager, frontend, mobile, QA, ML, DevOps,
-  internships), and accepts only United States / Europe / Remote, or Egypt,
-  depending on which region the source is tagged with.
-- Deduplicates by a stable SHA-256 fingerprint of `(source, external_id)`.
-- Stores everything in PostgreSQL so your Applied, Favorited, and Notes state
-  survives restarts.
-- Optionally scores each job 0 to 100 against your resume using Claude
-  (Anthropic API key required; otherwise scoring is silently skipped and the
-  dashboard falls back to sorting by newest).
-- Marks jobs that disappear from the source as Closed instead of deleting
-  them, so your history is preserved.
-- Maintains a tombstone table so jobs you permanently delete via the
-  "Submitted" button are never re-added on a future scrape, even if the
-  source still lists them.
-
----
-
-## Architecture
-
-```
-                Docker Compose
-+--------------------------------------------------+
-|  postgres 16       redis 7                       |
-|       ^              ^                           |
-|       |              |                           |
-|  +----+--+      +----+----+      +-----------+   |
-|  | api   | ---> | worker  |      | migrate   |   |
-|  | FastAPI|     | Celery  |      | (one-shot |   |
-|  | + HTMX |     | (AI +   |      |  Alembic) |   |
-|  +--+----+      |  per-   |      +-----------+   |
-|     |           |  company|                      |
-|     |           |  tasks) |                      |
-|     |           +---+-----+                      |
-|     |               |                            |
-|     v               v                            |
-|  Pipeline:                                       |
-|     scrapers/<source>.py                         |
-|       -> filter (title + region rules)           |
-|       -> dedupe (sha256 fingerprint)             |
-|       -> tombstone check                         |
-|       -> upsert into Postgres                    |
-|       -> mark unseen rows as Closed              |
-|       -> AI score new rows (optional)            |
-+--------------------------------------------------+
-```
-
-No scheduler. Scrapes only run when you ask:
-
-- Running `start.bat` (or `start.ps1` / `start.sh`) brings up the stack and
-  runs a fresh scrape every time.
-- Clicking "Refresh now" in the dashboard runs the same pipeline
-  synchronously and reloads the page when finished.
+Everything runs in Docker on your own machine. One command to start, one to
+stop. Refresh re-scrapes every source on demand and never re-surfaces a job
+you marked as Submitted.
 
 ---
 
@@ -76,19 +17,19 @@ No scheduler. Scrapes only run when you ask:
 Prerequisites: Docker Desktop installed and running.
 
 ```
-git clone https://github.com/<your-account>/job-hunter.git
-cd job-hunter
+git clone https://github.com/leo-salem/Leo-job-hunter.git
+cd Leo-job-hunter
 start.bat
 ```
 
-That single command:
+That one command:
 
 1. Creates `.env` from `.env.example` if it does not exist.
 2. Builds the images (cached after the first run).
 3. Starts Postgres, Redis, the migrator, the API, and the Celery worker.
 4. Waits for the API to respond.
 5. Seeds the companies list from `app/companies.yaml`.
-6. Runs a fresh scrape across every active company (about two minutes).
+6. Runs a fresh scrape across every active source in parallel.
 7. Opens `http://localhost:8000` in your browser.
 
 To stop everything:
@@ -97,141 +38,224 @@ To stop everything:
 stop.bat
 ```
 
-Data in the `pgdata` and `redisdata` volumes is preserved across stop and
-start cycles. To wipe the database completely, run `docker compose down -v`.
+Data in the `pgdata` and `redisdata` Docker volumes is preserved across
+stop and start cycles. To wipe the database completely, run
+`docker compose down -v`.
 
-If you are on Linux or macOS, use `./start.sh` and `./stop.sh` instead.
-If you are on PowerShell, you can also use `.\start.ps1` and `.\stop.ps1`.
-
----
-
-## The home page
-
-Opening `/` shows two cards, one per region:
-
-- "Europe and United States" routes to `/international` and lists jobs from
-  Greenhouse, Lever, Ashby, and (if enabled) Workday and Wellfound.
-- "Egypt" routes to `/egypt` and lists jobs from LinkedIn (guest search),
-  Wuzzuf, and (if reachable from your network) Bayt.
-
-Each region has its own filters and counts. The same Apply, Submitted,
-Favorite, Archive, and Notes actions are available in both.
+On Linux or macOS, use `./start.sh` and `./stop.sh` instead.
 
 ---
 
-## Job lifecycle and statuses
+## What you get
 
-Two independent fields per job:
+### Home page (two regions)
+
+Opening `/` shows two cards:
+
+- **Europe & United States** routes to `/international` and lists jobs from
+  Greenhouse, Lever, Ashby, and (optionally) Workday and Wellfound.
+- **Egypt** routes to `/egypt` and lists jobs from LinkedIn (guest search),
+  Wuzzuf, and (if reachable) Bayt.
+
+Each region has its own filters, counts, and ranking strategy. The same Apply,
+Submitted, Favorite, Archive, and Notes actions are available in both.
+
+### Job lifecycle and statuses
 
 | Lifecycle  | Meaning                                                         |
 | ---------- | --------------------------------------------------------------- |
 | ACTIVE     | Currently posted on the source.                                 |
-| CLOSED     | Was posted but has disappeared from the source. Kept in the DB. |
+| CLOSED     | Was posted, has disappeared from the source. Kept in the DB.    |
 | ARCHIVED   | You manually archived it.                                       |
 
 | Application status | Meaning                                                  |
 | ------------------ | -------------------------------------------------------- |
 | NOT_APPLIED        | Default.                                                 |
-| APPLIED            | You clicked the green Apply button. Row hidden from the default view. |
-| REJECTED           | You clicked Mark Rejected on the job detail page.        |
+| APPLIED            | You clicked Apply. Row hidden from default view, kept in DB. |
+| REJECTED           | You marked it rejected.                                  |
 | INTERVIEWING       | Optional progression state.                              |
 | OFFER              | Optional progression state.                              |
 
-Plus a separate hard-delete path:
+Plus a hard-delete path:
 
-- The red Submitted button hard-deletes the job and writes its fingerprint
-  to the `deleted_jobs` tombstone table. The orchestrator checks this
-  table before inserting, so the job is never re-added on future scrapes.
+- **Submitted** (red button) hard-deletes the job and writes its fingerprint
+  to the `deleted_jobs` tombstone table. The orchestrator checks the
+  tombstones before inserting, so the job is **never** re-added on future
+  scrapes, even if the source still lists it.
 
-User-controlled fields (Apply state, Favorite, Notes, AI score) are never
-overwritten by a scrape. Only volatile job fields (title, description,
-location, etc.) get updated.
-
----
-
-## Filters
-
-Title is matched against a regex include list (software engineer, backend
-engineer, Java developer, Spring Boot, junior, new grad, entry-level,
-graduate, associate, software engineer I) and an exclude list (senior, lead,
-staff, principal, director, frontend, full-stack, mobile, ML, data, SRE,
-DevOps, security, designer, QA, sales, marketing, internship, contract).
-
-Location rules depend on the region:
-
-- INTERNATIONAL accepts United States cities, common EU countries, and any
-  job marked as remote.
-- EGYPT accepts Egyptian cities (Cairo, Giza, Alexandria, Mansoura, etc.)
-  and remote jobs that mention MENA / Middle East / Arab world / Africa.
-
-Experience filter: if the description requires 3 or more years of
-experience and contains no junior / new grad / 0-2 hint, the job is
-rejected.
+User-controlled fields (Apply state, Favorite, Notes) are never overwritten
+by a scrape. Only volatile job fields (title, location, description) get
+updated.
 
 ---
 
-## Configuration
+## Local rule-based ranking (no AI)
 
-### Environment variables
+Each job gets a 0-100 score from a transparent rule engine. The score becomes
+the default sort order on the dashboard. Every score has a one-line `quality
+label`:
 
-Copy `.env.example` to `.env`. The interesting keys are:
+| Range | Label         |
+| ----- | ------------- |
+| 80-100 | Excellent Fit |
+| 65-79  | Strong Fit    |
+| 50-64  | Decent Fit    |
+| 35-49  | Weak Fit      |
+| 0-34   | Poor Fit      |
 
-| Variable           | Purpose                                                    |
-| ------------------ | ---------------------------------------------------------- |
-| `ANTHROPIC_API_KEY`| Enables AI scoring + cover letter + resume tailoring.      |
-| `ANTHROPIC_MODEL`  | Defaults to `claude-sonnet-4-6`.                           |
-| `AI_ENABLED`       | Set to `false` to disable AI even if a key is present.     |
-| `AI_MAX_JOBS_PER_RUN` | Caps AI calls per refresh (default 80).                 |
-| `RESUME_SUMMARY`   | Short paragraph the AI uses to score fit. Edit to match you. |
-| `WELLFOUND_ENABLED`| Default `false`. Set `true` to enable the Wellfound Playwright scraper. |
-| `HTTP_USER_AGENT`  | Default is a current Chrome on Windows.                    |
+Every job has a `confidence` 0-100 reflecting how trustworthy the score is
+(higher when the description is substantive and signals are aligned, lower
+on thin descriptions or conflicting signals like "Junior in title" + "5+
+years required").
 
-### Companies list
+### Region-aware strategy
 
-`app/companies.yaml` is the source of truth for what gets scraped. Each entry
-maps a source to its public identifier:
+The same rule fires with a different weight depending on which region you
+are looking at:
 
-- Greenhouse: the board token from `boards.greenhouse.io/<token>`.
-- Lever: the org slug from `jobs.lever.co/<org>`.
-- Ashby: the org slug from `jobs.ashbyhq.com/<org>`.
-- LinkedIn: a saved search; configure `keywords` and `location` under `config`.
-- Wuzzuf: a saved search; configure `keywords` under `config`.
-- Bayt: a saved search; configure `keywords` under `config`.
-- Workday: a per-tenant config under `config` (`host`, `tenant`, `site`).
+| Strategy             | Boosts                                              | Dampens                          |
+| -------------------- | --------------------------------------------------- | -------------------------------- |
+| **EGYPT**            | Java / Spring / Hibernate / Kafka stack, backend specialization, recognized Egypt employers | Generic SWE titles, frontend/fullstack |
+| **INTERNATIONAL**    | Generic Software Engineer (engineering-heavy), new-grad pipelines, Tier-S companies (Stripe/OpenAI/Google/etc.), visa/relocation signals, modern engineering signals (distributed systems, platform, scale) | Pure Java enterprise roles |
 
-The `target_region` field on each entry decides which dashboard the resulting
-jobs appear in: `INTERNATIONAL` or `EGYPT` (default is `INTERNATIONAL`).
+### Signal categories the engine reads
 
-After editing `app/companies.yaml`, run `start.bat` again to seed and
-re-scrape. The seed is idempotent: existing rows are updated, new rows are
-inserted, nothing is deleted.
+| Category | Examples |
+|---|---|
+| **Seniority** | junior / new grad / associate / mid / senior / staff / lead — detected from title; falls back to years-in-description |
+| **Specialization** | backend / generic-swe / frontend / fullstack / mobile / ML / data / devops / qa / security / embedded / game |
+| **Stack synergy** | Coherent Java backend (Java + Spring + Hibernate + JPA + REST), modern backend (Docker + K8s + Postgres + Redis + Kafka), frontend-heavy penalty |
+| **Experience** | required / preferred years; grad-friendly phrases ("0-2 years", "new grad welcome"); penalties for 5+ years required |
+| **Location** | USA / Europe / Remote / Egypt cities; remote always boosted |
+| **Company tier** | Tier-S iconic (Stripe/OpenAI/Google/Meta/Netflix/...) / Tier-A strong (Asana/Twilio/Booking-class) / Tier-B recognized / Egypt Tier-1 (Instabug/Halan/Valu/...) / spam recruiter / vague ("Confidential / Our Client") |
+| **Visa / relocation** | "visa sponsorship", "relocation support", "international candidates welcome" (strongly amplified for INTERNATIONAL) |
+| **Modern engineering** | "distributed systems", "millions of users", "platform engineer", "cloud-native", "CI/CD", "observability" |
+| **Career growth** | "mentorship", "ownership", "career growth", "graduate program", "rotational" |
+| **Role intent penalties** | help desk / tier-1 support / legacy mainframe / WordPress / CMS / low-code |
+| **Anti-spam** | "URGENT HIRING!!!", "Apply now!!!", WhatsApp emails, buzzword stuffing (rockstar / ninja / guru) |
+| **Recency** | small boost for jobs posted in the last week; small penalty for >60 days old |
+| **Description quality** | small penalty for very thin descriptions, small boost for substantive ones |
 
-### Adding a new company
+### Explainability
 
-Append to `app/companies.yaml`:
+Every job row's score badge is a link to `/jobs/{id}/score-debug`. That
+page shows:
 
-```yaml
-- slug: my-cool-startup
-  name: My Cool Startup
-  source: greenhouse
-  external_id: my-cool-startup
-  careers_url: https://example.com/careers
-  target_region: INTERNATIONAL
+- Final score and raw-pre-clamp score
+- Confidence
+- Strategy used (Egypt or International)
+- Every triggered rule with weight, multiplier math, and a human-readable reason
+- Positive signals (green)
+- Negative signals (red)
+- Detected features: normalized title, seniority, specialization, stack-in-title vs stack-in-description, required years
+
+### Tuning the engine
+
+Edit `app/pipeline/scoring_rules.py` (rule weights), `scoring_strategy.py`
+(per-region multipliers), `scoring_signals.py` (regex banks), or
+`scoring_company.py` (tier membership), then:
+
+```
+docker compose exec api python -m pytest tests/        # tests should still pass
+docker compose exec api python -m scripts.rescore      # apply to all jobs (~2s)
 ```
 
-Run `start.bat`. The next scrape includes the new company.
+No re-scrape needed. Dashboard re-sorts instantly.
 
-### Adding a new scraper source
+---
 
-1. Create `app/scrapers/<name>.py`, implementing `class FooScraper(BaseScraper)`
-   with an `async def fetch(self, company) -> Iterable[RawJob]`.
-2. Add the new value to the `Source` enum in `app/db/models.py`.
-3. Register the class in `app/scrapers/registry.py`.
-4. Add company entries to `app/companies.yaml`.
-5. Run `start.bat`.
+## Refresh is on-demand only
 
-The orchestrator, filters, dedup, tombstone check, lifecycle handling, and
-AI scoring all work transparently for the new source.
+There is no midnight cron, no startup-catchup, no background scheduler. Scrapes
+only happen when:
+
+- You run `start.bat` (calls `scripts/run_once.py` which calls `run_daily()`).
+- You click "Refresh now" in the dashboard (POST `/refresh` runs the same
+  pipeline synchronously, then the browser auto-reloads).
+
+Two reasons this is deliberate:
+
+1. You said "every refresh = fresh re-search" — no cached results.
+2. Predictability — you know exactly when the tool talks to the internet.
+
+---
+
+## Performance and politeness
+
+### Two-layer concurrency
+
+1. **Global cap** (`DAILY_CONCURRENCY=4`): total companies processed in
+   parallel during a scrape.
+2. **Per-source caps**: layered on top so that even with 4 global slots
+   free, at most N go to the same rate-limited source:
+   - `LINKEDIN_CONCURRENCY=1`  (LinkedIn is the most aggressively rate-limited)
+   - `WUZZUF_CONCURRENCY=2`
+   - `BAYT_CONCURRENCY=2`
+   - `WORKDAY_CONCURRENCY=2`
+   - `WELLFOUND_CONCURRENCY=1`
+   - Greenhouse / Lever / Ashby have no per-source cap (stable JSON APIs).
+
+### Detail-fetch optimizations
+
+Each detail-fetching scraper (LinkedIn, Wuzzuf, Bayt) does two skips before
+hitting the expensive per-job HTTP:
+
+1. **Title pre-check** — cards whose title doesn't match the filter regex
+   are skipped immediately. Most LinkedIn results don't match (you only want
+   junior / backend / Java), so this cuts ~80% of detail fetches.
+2. **Known-fingerprint skip** — if a job's fingerprint is already in your
+   DB (from any past run), the detail HTTP is skipped and a stub card is
+   emitted so the orchestrator can still update `last_seen_at`.
+
+### Politeness inside each scraper
+
+LinkedIn / Wuzzuf / Bayt use jittered sleep delays between pagination pages
+(`1.2-2.8s`) and between detail fetches (`0.4-1.5s`). Tenacity retries with
+exponential backoff handle transient server hiccups (1s → 3s → 9s → 15s).
+
+### Typical timings
+
+| Profile | DAILY_C. | LINKEDIN_C. | Approx wall time |
+|---|---:|---:|---:|
+| Safe (default) | 4 | 1 | ~2-3 min |
+| Balanced | 4 | 2 | ~1-2 min |
+| Fast (small rate-limit risk) | 6 | 3 | ~1 min |
+
+---
+
+## Architecture
+
+```
+                 Docker Compose
++--------------------------------------------------+
+|  postgres 16       redis 7                       |
+|       ^              ^                           |
+|       |              |                           |
+|  +----+--+      +----+----+      +-----------+   |
+|  | api    | --> | worker  |      | migrate   |   |
+|  | FastAPI|     | Celery  |      | (one-shot |   |
+|  | + HTMX |     | (per-   |      |  Alembic) |   |
+|  +---+----+     | company |      +-----------+   |
+|      |          |  tasks) |                      |
+|      |          +---+-----+                      |
+|      v              v                            |
+|  Pipeline:                                       |
+|    pre-load known fingerprints                   |
+|       -> scraper.fetch(skip_fingerprints)        |
+|       -> orchestrator filter (title + region)    |
+|       -> dedupe (sha256 fingerprint)             |
+|       -> tombstone check                         |
+|       -> upsert into Postgres                    |
+|       -> mark unseen rows as CLOSED              |
+|       -> heuristic_score + breakdown saved       |
++--------------------------------------------------+
+
+       Per-source concurrency:
+       Greenhouse / Lever / Ashby:  global only (4)
+       LinkedIn:                    1
+       Wuzzuf, Bayt, Workday:       2
+       Wellfound:                   1
+```
 
 ---
 
@@ -239,73 +263,195 @@ AI scoring all work transparently for the new source.
 
 ```
 job-hunter/
-  docker-compose.yml
+  start.bat / start.ps1 / start.sh      one-command startup
+  stop.bat  / stop.ps1  / stop.sh       graceful shutdown
+  docker-compose.yml                    postgres + redis + api + worker + migrate
   Dockerfile
-  .env.example
-  pyproject.toml
-  alembic.ini
-  start.bat / start.ps1 / start.sh
-  stop.bat  / stop.ps1  / stop.sh
-  alembic/                  database migrations
+  .env.example                          copy to .env on first run
+  pyproject.toml                        Python deps (no AI deps)
+  alembic.ini  + alembic/               6 migrations: 0001 init, 0002 region,
+                                        0003 tombstones, 0004 heuristic_score,
+                                        0005 score metadata, 0006 drop AI
   scripts/
-    seed_companies.py       idempotent loader for companies.yaml
-    run_once.py             manual one-shot of the daily pipeline
-    catchup.py              no-op script kept for compatibility
+    seed_companies.py                   idempotent loader for companies.yaml
+    run_once.py                         in-process daily pipeline (used by start.bat)
+    rescore.py                          recompute heuristic_score for every job
+    catchup.py                          deprecated no-op (kept for compatibility)
+  tests/
+    test_scoring.py                     51 tests covering every rule + ranking
   app/
-    main.py                 FastAPI app, dashboard routes, /refresh endpoint
-    celery_app.py           Celery factory (no beat schedule)
-    config.py               pydantic-settings from .env
-    companies.yaml          companies and saved searches to scrape
+    main.py                             FastAPI: home + region dashboards + /refresh +
+                                        /jobs/{id}/score-debug + HTMX action endpoints
+    celery_app.py                       Celery (worker only, no beat schedule)
+    config.py                           pydantic-settings from .env
+    companies.yaml                      companies + saved searches per source/region
     db/
-      models.py             SQLAlchemy 2.x models
-      session.py            async + sync sessions
-    repositories/           data access layer
-    schemas/                pydantic DTOs (RawJob, etc.)
-    scrapers/
-      base.py               BaseScraper interface
-      greenhouse.py / lever.py / ashby.py         clean JSON APIs
-      workday.py            generic configurable scraper
-      wellfound.py          Playwright, opt-in
-      linkedin.py           guest-search endpoint (no login)
-      wuzzuf.py             HTML scraping for Egypt
-      bayt.py               HTML scraping for the Middle East
-      registry.py           source -> scraper class
+      models.py                         Company, Job, ScrapeLog, SystemState, DeletedJob
+      session.py                        async + sync sessions
+    repositories/                       data access (companies, jobs, scrape_logs)
+    schemas/                            pydantic DTOs (RawJob)
     pipeline/
-      filters.py            title + region rules
-      dedupe.py             fingerprint helper
-      normalizer.py         RawJob -> Job
-      orchestrator.py       runs the full pipeline per company
-    ai/
-      client.py             Anthropic SDK wrapper
-      analyzer.py           scores and summarizes a job
-      cover_letter.py       per-job cover letter
-      resume_tailor.py      per-job tailored summary
-      prompts/              plain-text prompt templates
-    tasks/                  Celery tasks (analyze; scrape kept for manual API trigger)
-    api/                    JSON endpoints
-    dashboard/              Jinja templates + minimal CSS, HTMX for actions
-    utils/                  http (httpx + tenacity), hashing, time
+      filters.py                        title + region location rules
+      dedupe.py                         sha256 fingerprint
+      normalizer.py                     RawJob -> Job (with scoring)
+      orchestrator.py                   parallel runner + closed-detection + tombstones
+      scoring.py                        public score_job(...) facade
+      scoring_features.py               title normalization + seniority + spec + stack
+      scoring_strategy.py               region multipliers (EGYPT vs INTERNATIONAL)
+      scoring_rules.py                  rule evaluators + ScoreResult + quality_label
+      scoring_signals.py                regex banks (visa/scale/growth/spam/etc.)
+      scoring_company.py                tier-S / A / B / Egypt-T1 / spam / vague
+    scrapers/
+      base.py                           BaseScraper interface
+      registry.py                       source -> scraper class
+      greenhouse.py / lever.py / ashby.py    stable JSON APIs
+      linkedin.py                       guest-search HTML (no login)
+      wuzzuf.py                         Egypt-focused HTML
+      bayt.py                           Mideast HTML (often CDN-blocked)
+      workday.py                        configurable per tenant
+      wellfound.py                      Playwright, opt-in
+    tasks/
+      daily.py                          Celery task for queued daily runs
+      scrape.py                         Celery tasks for manual per-company/source
+    api/
+      deps.py
+      routes/                           JSON API: jobs / companies / logs / trigger
+    dashboard/
+      templates/                        Jinja templates: home, index, job_detail,
+                                        score_debug, logs, partials/job_row
+      static/app.css                    minimal styling
+    utils/
+      http.py                           httpx + tenacity (retries + jitter)
+      hashing.py                        sha256 fingerprint + prompt_hash
+      time.py                           dt parsing helpers
 ```
+
+---
+
+## Configuration
+
+### `.env`
+
+Copy `.env.example` to `.env`. Notable keys:
+
+| Variable                    | Default | Purpose                                          |
+| --------------------------- | -------:| ------------------------------------------------ |
+| `DAILY_CONCURRENCY`         | `4`     | Total concurrent companies                       |
+| `LINKEDIN_CONCURRENCY`      | `1`     | LinkedIn searches in parallel                    |
+| `WUZZUF_CONCURRENCY`        | `2`     | Wuzzuf searches in parallel                      |
+| `BAYT_CONCURRENCY`          | `2`     | Bayt searches in parallel                        |
+| `WORKDAY_CONCURRENCY`       | `2`     | Workday tenants in parallel                      |
+| `WELLFOUND_CONCURRENCY`     | `1`     | Wellfound (Playwright) in parallel               |
+| `WELLFOUND_ENABLED`         | `false` | Enable the Wellfound Playwright scraper          |
+| `PLAYWRIGHT_HEADLESS`       | `true`  | Used only when Wellfound is enabled              |
+| `HTTP_TIMEOUT_SECONDS`      | `30`    | Per-request HTTP timeout                         |
+| `HTTP_MAX_RETRIES`          | `4`     | Tenacity retry attempts                          |
+| `HTTP_USER_AGENT`           | Chrome  | Sent on every request                            |
+| `CATCHUP_THRESHOLD_HOURS`   | `20`    | Reserved for future use                          |
+| `TIMEZONE`                  | `Africa/Cairo` | Display timezone                          |
+
+### `app/companies.yaml`
+
+Source-of-truth for what gets scraped. Each entry maps a source to its
+public identifier and tags it with a `target_region` (`INTERNATIONAL` or
+`EGYPT`):
+
+```yaml
+- slug: stripe
+  name: Stripe
+  source: greenhouse
+  external_id: stripe
+  careers_url: https://stripe.com/jobs
+  target_region: INTERNATIONAL
+
+- slug: linkedin-egypt-java
+  name: LinkedIn - Java in Egypt
+  source: linkedin
+  external_id: linkedin-egypt-java
+  careers_url: https://www.linkedin.com/jobs/
+  target_region: EGYPT
+  config:
+    keywords: java
+    location: Egypt
+    time_posted: r2592000     # past 30 days
+    max_pages: 6
+    fetch_details: true
+```
+
+After editing, run `start.bat` again — seed is idempotent.
+
+### Identifiers per source
+
+- **Greenhouse**: the slug after `boards.greenhouse.io/`
+- **Lever**: the slug after `jobs.lever.co/`
+- **Ashby**: the slug after `jobs.ashbyhq.com/`
+- **LinkedIn**: any slug; configure `keywords` + `location` in `config`
+- **Wuzzuf** / **Bayt**: any slug; configure `keywords` in `config`
+- **Workday**: any slug; configure `host` + `tenant` + `site` in `config`
+
+---
+
+## Adding a new scraper source
+
+1. Create `app/scrapers/<name>.py`, implement `class FooScraper(BaseScraper)`
+   with `async def fetch(self, company, *, skip_fingerprints=None) -> Iterable[RawJob]`.
+2. Add the new value to the `Source` enum in `app/db/models.py`.
+3. Register the class in `app/scrapers/registry.py`.
+4. Optionally add a per-source concurrency knob in `config.py`.
+5. Add company entries to `app/companies.yaml`.
+6. Run `start.bat`.
+
+The orchestrator, filters, dedup, tombstone check, lifecycle handling, and
+scoring all work transparently for the new source.
 
 ---
 
 ## Common commands
 
 ```
-start.bat                 build + start + seed + scrape + open browser
-stop.bat                  stop containers (data preserved)
-docker compose down -v    stop and WIPE pgdata + redisdata (destructive)
-docker compose logs -f    tail all container logs
-docker compose ps         list running services
+start.bat                          one-command startup + open browser
+stop.bat                           graceful shutdown (data preserved)
+
+docker compose down -v             stop + WIPE database and volumes (destructive)
+docker compose ps                  list running services
+docker compose logs -f             tail all container logs
+
+# Inside the api container
+docker compose exec api python -m scripts.seed_companies     # reload companies.yaml
+docker compose exec api python -m scripts.run_once           # run pipeline now
+docker compose exec api python -m scripts.rescore            # recompute all scores
+docker compose exec api alembic upgrade head                 # apply migrations
+docker compose exec api alembic current                      # current schema version
+docker compose exec api python -m pytest tests/              # run scoring tests
 ```
 
-Manual scripts inside the api container:
+---
+
+## Testing
+
+51 tests in `tests/test_scoring.py` covering:
+
+- Title normalization (SWE / SDE / Jr / Sr expansion)
+- Seniority detection (intern / junior / mid / senior / staff / lead)
+- Specialization detection (backend / frontend / mobile / ML / data / etc.)
+- Stack synergy (coherent Java stack, modern backend stack)
+- Experience reasoning (grad-friendly phrases, high-years penalty)
+- Region strategy (Java higher in Egypt, generic SWE higher in International)
+- Company tiers (S / A / B / Egypt-T1 / spam / vague)
+- Visa signals
+- Modern engineering signals
+- Career growth signals
+- Role-intent penalties (support, legacy, low-eng)
+- Anti-spam (URGENT HIRING, buzzword stuffing, keyword stuffing)
+- Ranking comparisons (junior > senior, Stripe SWE > random shop backend)
+- False positives (JavaScript != Java, senior overrides stack)
+- Quality labels (Excellent / Strong / Decent / Weak / Poor)
+- Score calibration (perfect job rarely hits 100, average job in middle)
+
+Run:
 
 ```
-docker compose exec api python -m scripts.seed_companies
-docker compose exec api python -m scripts.run_once
-docker compose exec api alembic upgrade head
-docker compose exec api alembic current
+docker compose exec api python -m pytest tests/ -v
 ```
 
 ---
@@ -314,39 +460,39 @@ docker compose exec api alembic current
 
 - Python 3.11
 - FastAPI 0.115, Uvicorn
-- SQLAlchemy 2.x async, asyncpg, psycopg
+- SQLAlchemy 2.x async + asyncpg + psycopg
 - Alembic for migrations
 - Pydantic 2 and pydantic-settings
-- Celery 5 with a Redis broker (worker only, no beat)
+- Celery 5 with a Redis broker
 - httpx + tenacity for HTTP with retries and jitter
 - BeautifulSoup4 + lxml for HTML parsing
-- Playwright (only used when Wellfound is enabled)
-- Anthropic SDK for Claude
+- Playwright (only if Wellfound is enabled)
 - Jinja2 + HTMX 1.9 for the dashboard
 - Postgres 16 and Redis 7 via Docker
+- Pytest for tests
 
 ---
 
 ## Known limitations
 
-- Bayt.com returns HTTP 403 to requests from typical cloud / Docker IPs,
-  apparently due to a Cloudflare-class fingerprint check. The scraper is
-  correct but blocked at the network layer; entries are kept in
-  `companies.yaml` in case the scraper succeeds from a different network.
-- LinkedIn's guest endpoint is rate-limited and the scraper deliberately
+- **Bayt.com** returns HTTP 403 to requests from typical cloud and Docker IPs
+  because of a Cloudflare-class fingerprint check. The scraper is correct but
+  blocked at the network layer; entries are kept in `companies.yaml` in case
+  the scraper succeeds from a different network.
+- **LinkedIn's guest endpoint** is rate-limited and the scraper deliberately
   uses jittered delays. Expect 50-150 jobs across all configured searches.
-- Wuzzuf's HTML structure uses hashed CSS class names that change over time.
-  The parser falls back to href-shape detection, but a major site redesign
-  could still break it.
-- Workday and Wellfound are off by default. Workday requires per-tenant
+- **Wuzzuf's HTML** uses hashed CSS class names that change over time. The
+  parser falls back to href-shape detection, but a major site redesign could
+  still break it.
+- **Workday** and **Wellfound** are off by default. Workday requires per-tenant
   configuration; Wellfound requires Playwright and is fragile against
   Cloudflare. Enable only if you need them.
-- The scrape job is a long, synchronous HTTP request when triggered from
-  the Refresh button. Keep the browser tab open until it completes.
-- There is no authentication. Do not expose port 8000 to the public network.
+- **Refresh button** triggers a synchronous scrape that can take 1-3 minutes.
+  Keep the tab open until it completes; the page reloads automatically.
+- **No authentication.** Do not expose port 8000 to the public network.
 
 ---
 
 ## License
 
-This is a personal project. Use, fork, and adapt freely. No warranty.
+Personal project. Use, fork, and adapt freely. No warranty.
